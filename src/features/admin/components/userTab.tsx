@@ -25,51 +25,69 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast, Toaster } from "sonner";
 import { DriverType } from "@/features/driver/types/types";
+import { StationType } from "@/features/station/types/types";
+import { UserType } from "@/features/user/types/types";
+import { CashierType } from "@/features/cashier/types/types";
+import useUsersQuery from "@/features/user/hooks/useUsersQuery";
+import useCashiersQuery from "@/features/cashier/hooks/useCashiersQuery";
+import useStationsQuery from "@/features/station/hooks/useStationsQuery";
+import useDeleteUserMutate from "@/features/user/hooks/useDeleteUserMutate";
+import usePatchUserMutate from "@/features/user/hooks/usePatchUserMutate";
+import usePatchCashierMutate from "@/features/cashier/hooks/usePatchCashierMutate";
+import usePostCashierMutate from "@/features/cashier/hooks/usePostCashierMutate";
+import useDriversQuery from "@/features/driver/hooks/useDriversQuery";
+import usePostDriverMutate from "@/features/driver/hooks/usePostDriverMutate";
 
-type UserRole = "user" | "admin" | "cashier" | "driver";
-type User = {
-  id: number;
-  name: string;
-  email: string;
-  image: string;
-  role: UserRole;
+type UserTabProps = {
+  users: UserType[];
+  cashiers: CashierType[];
+  stations: StationType[];
 };
 
-type Cashier = {
-  id: number;
-  user_id: number;
-  station_id: number;
-};
-export default function UserTab() {
+export default function UserTab({
+  users: initUsers,
+  cashiers: initCashiers,
+  stations: initStations,
+}: UserTabProps) {
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [cashiers, setCashiers] = useState<Cashier[]>([]);
-  const [stations, setStations] = useState<{ id: number; name: string }[]>([]);
   const [editState, setEditState] = useState<
-    Record<number, { role: string; station_id?: number | null }>
+    Record<number, { role: UserType["role"]; station_id?: number | null }>
   >({});
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setLoading(true);
-    fetch("/api/user")
-      .then(res => res.json())
-      .then(data => setUsers(data.users || []));
-    fetch("/api/cashier")
-      .then(res => res.json())
-      .then(data => setCashiers(data.cashiers || []));
-    fetch("/api/station")
-      .then(res => res.json())
-      .then(data => {
-        setStations(data.stations || []);
-        setLoading(false);
-      });
-  }, []);
+  const {
+    data: drivers = [],
+    isLoading: driversLoading,
+    error: driversError,
+  } = useDriversQuery();
 
-  const handleRoleChange = (userId: number, newRole: string) => {
+  const {
+    data: users = [],
+    isLoading: usersLoading,
+    error: usersError,
+  } = useUsersQuery(initUsers);
+
+  const {
+    data: cashiers = [],
+    isLoading: cashiersLoading,
+    error: cashierError,
+  } = useCashiersQuery(initCashiers);
+
+  const {
+    data: stations = [],
+    isLoading: stationsLoading,
+    error: stationsError,
+  } = useStationsQuery(initStations);
+
+  const deleteUserMutation = useDeleteUserMutate();
+  const patchUserMutation = usePatchUserMutate();
+  const patchCashierMutation = usePatchCashierMutate();
+  const postCashierMutation = usePostCashierMutate();
+  const postDriversMutation = usePostDriverMutate();
+
+  const handleRoleChange = (userId: number, newRole: UserType["role"]) => {
     setEditState(state => {
       let station_id: number | undefined = undefined;
       if (newRole === "cashier") {
@@ -101,118 +119,100 @@ export default function UserTab() {
     }));
   };
 
-  const handleSave = async (user: User) => {
-    setLoading(true);
+  const handleSave = async (user: UserType) => {
     const update = editState[user.id] || { role: user.role };
+
     try {
-      // PATCH user role
-      await fetch(`/api/user/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: update.role }),
+      // First, update the user role and wait for completion
+      await patchUserMutation.mutateAsync({
+        id: user.id,
+        update: { role: update.role },
       });
 
-      // If cashier, always ensure entry exists or update station assignment
+      // Then handle role-specific logic based on the new role
       if (update.role === "cashier") {
         const cashier = cashiers.find(c => c.user_id === user.id);
-        // Split name into first and last name, handle single-word names
         const nameParts = user.name.split(" ");
         const first_name = nameParts[0] || "";
         const last_name =
           nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
         if (cashier) {
-          // Update station assignment if station_id is provided
-          await fetch(`/api/cashier/${cashier.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ station_id: update.station_id }),
+          // Update existing cashier's station assignment
+          await patchCashierMutation.mutateAsync({
+            id: cashier.id,
+            update: { station_id: update.station_id ?? undefined },
           });
         } else {
-          // Always create new cashier entry if not exists
-          const cashierPayload: {
-            first_name: string;
-            last_name: string;
-            user_id: number;
-            station_id?: number;
-          } = {
-            first_name,
-            last_name,
-            user_id: user.id,
-          };
+          // Create new cashier entry
           if (
             typeof update.station_id === "number" &&
             !isNaN(update.station_id)
           ) {
-            cashierPayload.station_id = update.station_id;
+            await postCashierMutation.mutateAsync({
+              first_name,
+              last_name,
+              user_id: user.id,
+              station_id: update.station_id,
+            });
+          } else {
+            toast.error("Station must be assigned for cashier role.");
+            return;
           }
-          await fetch(`/api/cashier`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(cashierPayload),
-          });
         }
       }
 
-      // If driver, only POST if driver entry does not exist for this user
+      // Handle driver role
       if (update.role === "driver") {
-        // Split name into first and last name
         const [first_name, ...rest] = user.name.split(" ");
         const last_name = rest.join(" ");
-        // Check if driver entry exists for this user
-        let driverExists = false;
-        try {
-          const res = await fetch(`/api/driver`);
-          if (res.ok) {
-            const data = await res.json();
-            // If any driver in the list has this user_id, consider it exists
-            driverExists =
-              Array.isArray(data.drivers) &&
-              data.drivers.some((d: DriverType) => d.user_id === user.id);
-          }
-        } catch {}
+
+        const driverExists =
+          Array.isArray(drivers) &&
+          drivers.some((d: DriverType) => d.user_id === user.id);
+
         if (!driverExists) {
-          await fetch(`/api/driver`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: user.id, first_name, last_name }),
+          await postDriversMutation.mutateAsync({
+            user_id: user.id,
+            first_name,
+            last_name,
           });
         }
       }
 
-      setEditState(state => ({
-        ...state,
-        [user.id]: { role: update.role, station_id: update.station_id },
-      }));
-      // Refresh users and cashiers
-      fetch("/api/user")
-        .then(res => res.json())
-        .then(data => setUsers(data.users || []));
-      fetch("/api/cashier")
-        .then(res => res.json())
-        .then(data => setCashiers(data.cashiers || []));
-      toast.success("Save successful");
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // Clear edit state for this user after successful save
+      setEditState(state => {
+        const newState = { ...state };
+        delete newState[user.id];
+        return newState;
+      });
     } catch (error) {
-      toast.error("Save failed");
+      // Let mutations handle their own error toasts
+      console.error("Save operation failed:", error);
     }
-    setLoading(false);
   };
 
   const handleDelete = async (id: number) => {
-    setLoading(true);
-    await fetch(`/api/user/${id}`, { method: "DELETE" });
     setDeleteId(null);
-    fetch("/api/user")
-      .then(res => res.json())
-      .then(data => setUsers(data.users || []));
-    setLoading(false);
+    deleteUserMutation.mutate(id);
   };
 
   return (
     <div>
       <h2 className="text-xl font-semibold mb-2">Manage User Roles</h2>
-      {loading ? (
-        <div>Loading Users...</div>
+
+      {(usersError || cashierError || stationsError || driversError) && (
+        <div className="bg-red-50 border border-red-200 rounded p-4 mb-4">
+          <p className="text-red-700">
+            Error loading data. Please refresh the page.
+          </p>
+        </div>
+      )}
+
+      {usersLoading || cashiersLoading || stationsLoading || driversLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-lg">Loading Users...</div>
+        </div>
       ) : (
         <Table>
           <TableHeader>
@@ -225,7 +225,7 @@ export default function UserTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user: User) => {
+            {users.map((user: UserType) => {
               const edit = editState[user.id] || { role: user.role };
               // Find cashier record for this user
               const cashier = cashiers.find(c => c.user_id === user.id);
@@ -236,7 +236,9 @@ export default function UserTab() {
                   <TableCell>
                     <Select
                       value={edit.role}
-                      onValueChange={val => handleRoleChange(user.id, val)}
+                      onValueChange={val =>
+                        handleRoleChange(user.id, val as UserType["role"])
+                      }
                     >
                       <SelectTrigger className="w-[120px]">
                         <SelectValue className="text-left" />
@@ -265,7 +267,7 @@ export default function UserTab() {
                           <SelectValue placeholder="Assign station" />
                         </SelectTrigger>
                         <SelectContent>
-                          {stations.map(station => (
+                          {stations.map((station: StationType) => (
                             <SelectItem
                               key={station.id}
                               value={String(station.id)}
@@ -280,7 +282,15 @@ export default function UserTab() {
                     )}
                   </TableCell>
                   <TableCell className="flex gap-2">
-                    <Button onClick={() => handleSave(user)} disabled={loading}>
+                    <Button
+                      onClick={() => handleSave(user)}
+                      disabled={
+                        postCashierMutation.isPending ||
+                        postDriversMutation.isPending ||
+                        patchCashierMutation.isPending ||
+                        patchUserMutation.isPending
+                      }
+                    >
                       Save
                     </Button>
                     <Dialog
@@ -307,7 +317,7 @@ export default function UserTab() {
                           <Button
                             variant="destructive"
                             onClick={() => handleDelete(user.id)}
-                            disabled={loading}
+                            disabled={deleteUserMutation.isPending}
                           >
                             Delete
                           </Button>
