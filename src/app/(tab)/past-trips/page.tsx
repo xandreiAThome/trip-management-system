@@ -1,39 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { AggregatedTripType } from "@/features/trips/types/types";
 import TripCard from "@/features/trips/components/tripCard";
-import { toast, Toaster } from "sonner";
+import { Toaster } from "sonner";
+import useDailyTripsQuery from "@/features/trips/hooks/useDailyTripsQuery";
 
 export default function PastTripsPage() {
   // Use string for date in yyyy-MM-dd format for compatibility with input[type=date]
   const [selectedDate, setSelectedDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd")
   );
-  const [trips, setTrips] = useState<AggregatedTripType[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const fetchTrips = async (dateStr: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/trip/daily?date=${dateStr}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to fetch trips");
-      setTrips(Array.isArray(data.trips) ? data.trips : []);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      toast.error(err.message || "Failed to fetch trips");
-      setTrips([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedDate) fetchTrips(selectedDate);
-  }, [selectedDate]);
+  // Use TanStack Query hook to fetch trips
+  const { data: trips = [], isLoading } = useDailyTripsQuery(selectedDate);
 
   return (
     <div className="min-h-screen bg-green-50 flex flex-col items-center py-8 px-2">
@@ -46,7 +26,7 @@ export default function PastTripsPage() {
           className="flex flex-col sm:flex-row items-center justify-center gap-4"
           onSubmit={e => {
             e.preventDefault();
-            if (selectedDate) fetchTrips(selectedDate);
+            // TanStack Query will automatically refetch when selectedDate changes
           }}
         >
           <label className="font-semibold text-green-700" htmlFor="date-picker">
@@ -77,16 +57,7 @@ export default function PastTripsPage() {
             </CardContent>
           </Card>
         ) : (
-          trips.map(trip => (
-            <TripCard
-              key={trip.id}
-              trip={trip}
-              onSuccessEdit={() => fetchTrips(selectedDate)}
-              stations={[]}
-              drivers={[]}
-              buses={[]}
-            />
-          ))
+          trips.map(trip => <TripCard key={trip.id} trip={trip} />)
         )}
       </div>
     </div>

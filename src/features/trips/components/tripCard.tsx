@@ -20,9 +20,6 @@ import { AlignJustify, Map } from "lucide-react";
 import IssuedTicketsModal from "@/features/ticket/components/issuedTicketsModal";
 import EditTripModal from "./EditTrip";
 import { AggregatedTripType } from "../types/types";
-import { AggregatedBusType } from "@/features/bus/types/types";
-import { DriverType } from "@/features/driver/types/types";
-import { StationType } from "@/features/station/types/types";
 import { formatTime } from "@/lib/utils";
 import { toast } from "sonner";
 import usePassengerTicketsQuery from "@/features/ticket/hooks/usePassengerTicketsQuery";
@@ -30,19 +27,9 @@ import useUpdateTripStatusMutation from "@/features/trips/hooks/useUpdateTripSta
 
 interface TripCardProps {
   trip: AggregatedTripType;
-  onSuccessEdit: () => void;
-  stations: StationType[];
-  drivers: DriverType[];
-  buses: AggregatedBusType[];
 }
 
-export default function TripCard({
-  trip,
-  onSuccessEdit,
-  buses,
-  stations,
-  drivers,
-}: TripCardProps) {
+export default function TripCard({ trip }: TripCardProps) {
   const [status, setStatus] = useState<"boarding" | "transit" | "complete">(
     trip.status ?? "boarding"
   );
@@ -62,7 +49,6 @@ export default function TripCard({
       });
 
       setStatus(newStatus as "boarding" | "transit" | "complete");
-      onSuccessEdit(); // Refresh trip data in parent component
     } catch (error) {
       console.error("Error updating trip status:", error);
       const errorMessage =
@@ -157,13 +143,7 @@ export default function TripCard({
                 <Map className="h-5 w-5" />
               </button>
             </Link>
-            <EditTripModal
-              trip={trip}
-              onSuccess={onSuccessEdit}
-              stations={stations}
-              buses={buses}
-              drivers={drivers}
-            />
+            <EditTripModal trip={trip} />
           </div>
 
           {/* Right Side:  */}

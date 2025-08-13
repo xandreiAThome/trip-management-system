@@ -17,11 +17,9 @@ export default function OverviewCard() {
   const today = format(new Date(), "yyyy-MM-dd");
 
   // TanStack Query hooks
-  const {
-    data: trips = [],
-    isLoading: isTripsLoading,
-    refetch: refetchTrips,
-  } = useDailyTripsQuery(today);
+  const { data: trips = [], isLoading: isTripsLoading } =
+    useDailyTripsQuery(today);
+
   const { data: stations = [], isLoading: isStationsLoading } =
     useStationsQuery();
   const { data: buses = [], isLoading: isBusesLoading } = useBusesQuery();
@@ -37,10 +35,6 @@ export default function OverviewCard() {
 
   const isLoading = isTripsLoading;
   const isMetaLoading = isStationsLoading || isBusesLoading || isDriversLoading;
-
-  const handleRefetchTrips = () => {
-    refetchTrips();
-  };
 
   if (isMetaLoading) {
     return (
@@ -105,26 +99,14 @@ export default function OverviewCard() {
           ) : (
             <div className="flex flex-col overflow-y-auto gap-y-4">
               {filteredTrips.map(trip => (
-                <TripCard
-                  key={trip.id}
-                  onSuccessEdit={handleRefetchTrips}
-                  trip={trip}
-                  stations={stations}
-                  buses={buses}
-                  drivers={drivers}
-                />
+                <TripCard key={trip.id} trip={trip} />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
       <div className="flex mt-4 justify-center absolute bottom-10">
-        <CreateTripModal
-          onTripCreated={handleRefetchTrips}
-          stations={stations}
-          buses={buses}
-          drivers={drivers}
-        />
+        <CreateTripModal stations={stations} buses={buses} drivers={drivers} />
       </div>
       <Toaster position="top-right" richColors />
     </div>

@@ -15,30 +15,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AggregatedBusType } from "@/features/bus/types/types";
-import { DriverType } from "@/features/driver/types/types";
-import { StationType } from "@/features/station/types/types";
 import { SquarePen } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { AggregatedTripType } from "../types/types";
 import TimePicker from "./timePicker";
-import { toast } from "sonner";
+import useUpdateTripMutation from "../hooks/useUpdateTripMutation";
+import useBusesQuery from "@/features/bus/hooks/useBusesQuery";
+import useDriversQuery from "@/features/driver/hooks/useDriversQuery";
+import useStationsQuery from "@/features/station/hooks/useStationsQuery";
 
 interface EditTripModalProps {
   trip: AggregatedTripType;
-  onSuccess?: () => void;
-  stations: StationType[];
-  drivers: DriverType[];
-  buses: AggregatedBusType[];
 }
 
-export default function EditTripModal({
-  trip,
-  onSuccess,
-  stations,
-  drivers,
-  buses,
-}: EditTripModalProps) {
+export default function EditTripModal({ trip }: EditTripModalProps) {
+  // Use TanStack Query hooks to fetch data
+  const { data: buses = [] } = useBusesQuery();
+  const { data: drivers = [] } = useDriversQuery();
+  const { data: stations = [] } = useStationsQuery();
+
+  const updateTripMutation = useUpdateTripMutation();
+
   const [driverId, setDriverId] = useState("");
   const [busId, setBusId] = useState("");
   const [srcStationId, setSrcStationId] = useState("");
@@ -47,8 +44,9 @@ export default function EditTripModal({
   const [endTime, setEndTime] = useState<Date>(new Date());
   const [originalStartTime, setOriginalStartTime] = useState<Date>(new Date());
   const [originalEndTime, setOriginalEndTime] = useState<Date>(new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const isSubmitting = updateTripMutation.isPending;
 
   useEffect(() => {
     // Set form fields from trip prop
@@ -69,22 +67,20 @@ export default function EditTripModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+
     if (!driverId && !busId && !srcStationId && !destStationId) {
-      toast.error("Please fill in at least one field");
-      setIsSubmitting(false);
+      updateTripMutation.reset();
       return;
     }
     if (!startTime || !endTime) {
-      toast.error("Please select start and end time");
-      setIsSubmitting(false);
+      updateTripMutation.reset();
       return;
     }
     if (endTime <= startTime) {
-      toast.error("End time must be after start time");
-      setIsSubmitting(false);
+      updateTripMutation.reset();
       return;
     }
+
     try {
       // Only include time fields if they've been changed
       const hasStartTimeChanged =
@@ -112,26 +108,14 @@ export default function EditTripModal({
         requestBody.end_time = endTime.toISOString();
       }
 
-      const res = await fetch(`/api/trip/${trip.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
+      await updateTripMutation.mutateAsync({
+        id: trip.id,
+        ...requestBody,
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update trip");
-      }
-      toast.success("Trip updated successfully");
       setDrawerOpen(false);
-      if (onSuccess) onSuccess();
     } catch (err) {
       console.error("Error updating trip:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to update trip");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 

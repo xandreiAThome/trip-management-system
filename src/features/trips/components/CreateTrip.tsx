@@ -24,6 +24,7 @@ import { TripType } from "../types/types";
 import { useState } from "react";
 import { toast } from "sonner";
 import TimePicker from "./timePicker";
+import useCreateTripMutation from "../hooks/useCreateTripMutation";
 
 type CreateTripPayload = Omit<
   TripType,
@@ -46,8 +47,10 @@ export function CreateTripModal({
   buses,
   drivers,
 }: CreateTripModalProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // TanStack Query mutation
+  const createTripMutation = useCreateTripMutation();
 
   const [formData, setFormData] = useState({
     driver: "",
@@ -70,25 +73,22 @@ export function CreateTripModal({
   const [startTime, setStartTime] = useState<Date>(start);
   const [endTime, setEndTime] = useState<Date>(end);
 
-  // All data is passed as props from OverviewCard. No fetching here.
   // TimePicker logic is now handled in the TimePicker component
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
     const { driver, bus, source, destination } = formData;
 
     if (!driver || !bus || !source || !destination) {
       toast.error("Please fill in all required fields.");
-      setIsSubmitting(false);
       return;
     }
     if (endTime <= startTime) {
       toast.error("End time must be after start time.");
-      setIsSubmitting(false);
       return;
     }
+
     try {
       const payload: CreateTripPayload = {
         start_time: startTime.toISOString(),
@@ -99,18 +99,7 @@ export function CreateTripModal({
         driver_id: parseInt(driver),
       };
 
-      const res = await fetch("/api/trip", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to create trip");
-      }
+      await createTripMutation.mutateAsync(payload);
 
       // Reset form
       setFormData({
@@ -129,8 +118,6 @@ export function CreateTripModal({
     } catch (err) {
       console.error("Error:", err);
       toast.error(err instanceof Error ? err.message : "Failed to create trip");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -255,9 +242,9 @@ export function CreateTripModal({
           <Button
             type="submit"
             className="bg-[#71AC61] hover:bg-[#456A3B] mt-4"
-            disabled={isSubmitting}
+            disabled={createTripMutation.isPending}
           >
-            {isSubmitting ? "Creating..." : "Create New Trip"}
+            {createTripMutation.isPending ? "Creating..." : "Create New Trip"}
           </Button>
         </form>
       </DrawerContent>
