@@ -35,7 +35,8 @@ export default function TripCard({ trip }: TripCardProps) {
   );
 
   // TanStack Query hooks
-  const { data: passengerTickets = [] } = usePassengerTicketsQuery(trip.id);
+  const { data: passengerTickets = [], isLoading: isLoadingTickets } =
+    usePassengerTicketsQuery(trip.id);
   const updateTripStatusMutation = useUpdateTripStatusMutation();
 
   // Extract data from props (assuming props now includes the relations)
@@ -149,19 +150,39 @@ export default function TripCard({ trip }: TripCardProps) {
           {/* Right Side:  */}
           <div className="flex flex-col items-end">
             <div className="flex flex-row gap-1 justify-end items-baseline mr-1">
-              <span
-                className={`font-bold ${
-                  passengerTickets?.length > bus.capacity
-                    ? "text-orange-600"
-                    : ""
-                }`}
-              >
-                {passengerTickets?.length} / {bus.capacity}
-              </span>
-              {passengerTickets?.length > bus.capacity && (
-                <span className="text-xs text-orange-600 font-medium">
-                  ({passengerTickets.length - bus.capacity} standing)
+              {isLoadingTickets ? (
+                <span className="font-bold text-gray-400">
+                  ... / {bus.capacity}
                 </span>
+              ) : (
+                (() => {
+                  const seatedPassengers =
+                    passengerTickets?.filter(ticket => ticket.seat_id !== null)
+                      .length || 0;
+                  const standingPassengers =
+                    passengerTickets?.filter(ticket => ticket.seat_id === null)
+                      .length || 0;
+                  const totalPassengers = seatedPassengers + standingPassengers;
+
+                  return (
+                    <>
+                      {standingPassengers > 0 && (
+                        <span className="text-xs text-green-600 font-medium">
+                          ({standingPassengers} standing)
+                        </span>
+                      )}
+                      <span
+                        className={`font-bold ${
+                          totalPassengers > bus.capacity
+                            ? "text-orange-600"
+                            : ""
+                        }`}
+                      >
+                        {seatedPassengers} / {bus.capacity}
+                      </span>
+                    </>
+                  );
+                })()
               )}
             </div>
             <Link
