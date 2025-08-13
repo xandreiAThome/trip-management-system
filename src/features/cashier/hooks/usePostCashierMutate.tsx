@@ -14,15 +14,17 @@ export default function usePostCashierMutate() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed to post cashier");
-      return res.json;
+      return res.json();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to add cashier");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cashiers"] });
-      toast.success("Sucessfully added cashier");
+      toast.success("Successfully added cashier");
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to add cashier");
+    onSettled: () => {
+      // Refetch after completion to get the real server data
+      queryClient.invalidateQueries({ queryKey: ["cashiers"] });
     },
   });
 }

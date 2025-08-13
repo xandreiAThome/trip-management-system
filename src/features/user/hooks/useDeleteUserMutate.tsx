@@ -7,7 +7,7 @@ export default function useDeleteUserMutate() {
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/user/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete user");
-      return res.json;
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });

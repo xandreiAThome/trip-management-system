@@ -9,7 +9,7 @@ export default function useDeleteStationMutate() {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete station");
-      return res.json;
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stations"] });

@@ -14,7 +14,7 @@ export default function usePostStationMutate() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed to post station");
-      return res.json;
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stations"] });

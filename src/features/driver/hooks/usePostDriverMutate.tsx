@@ -14,7 +14,7 @@ export default function usePostDriverMutate() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed to post driver");
-      return res.json;
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["drivers"] });

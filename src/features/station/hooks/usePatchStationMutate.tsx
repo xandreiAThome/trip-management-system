@@ -18,15 +18,40 @@ export default function usePatchStationMutate() {
         body: JSON.stringify(update),
       });
       if (!res.ok) throw new Error("Failed to patch station");
-      return res.json;
+      return res.json();
+    },
+    onMutate: async ({ id, update }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["stations"] });
+
+      // Snapshot the previous value
+      const previousStations = queryClient.getQueryData<StationType[]>([
+        "stations",
+      ]);
+
+      // Optimistically update to the new value
+      queryClient.setQueryData<StationType[]>(["stations"], (old = []) =>
+        old.map(station =>
+          station.id === id ? { ...station, ...update } : station
+        )
+      );
+
+      // Return a context object with the snapshotted value
+      return { previousStations };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["stations"] });
       toast.success("Sucessfully updated station");
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => {
+
+    onError: (error: Error, variables, context) => {
+      if (context?.previousStations) {
+        queryClient.setQueryData(["stations"], context.previousStations);
+      }
       toast.error(error.message || "Failed to update station");
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure server state
+      queryClient.invalidateQueries({ queryKey: ["stations"] });
     },
   });
 }
