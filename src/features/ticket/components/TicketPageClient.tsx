@@ -74,10 +74,6 @@ export default function TicketPageClient({
     }
   }, [cashiers, session, selectedCashier]);
 
-  const leftSeats = Array.from({ length: 12 }, (_, i) => i + 1);
-  const rightSeats = Array.from({ length: 12 }, (_, i) => i + 13);
-  const backSeats = Array.from({ length: 5 }, (_, i) => i + 25);
-
   const getSeat = (query: { id?: number; number?: number }) => {
     if (query.id !== undefined) {
       return seats.find(s => s.id === query.id) || null;
@@ -94,7 +90,14 @@ export default function TicketPageClient({
 
   const handleSeatSelect = (seatNumber: number) => {
     const seat = getSeat({ number: seatNumber });
-    if (seat) setSelectedSeat(seat.id);
+    if (seat) {
+      setSelectedSeat(seat.id);
+    } else {
+      // If seat doesn't exist in database but is within bus capacity,
+      // we'll use the seat number as a negative ID to distinguish it
+      // This allows selection of seats that haven't been created in the DB yet
+      setSelectedSeat(-seatNumber);
+    }
   };
 
   const handleBaggageSubmit = async () => {
@@ -230,9 +233,6 @@ export default function TicketPageClient({
             trip={trip}
             seats={seats}
             unavailableSeats={unavailableSeats}
-            leftSeats={leftSeats}
-            rightSeats={rightSeats}
-            backSeats={backSeats}
             handleSeatSelect={handleSeatSelect}
             cashiers={cashiers}
           />

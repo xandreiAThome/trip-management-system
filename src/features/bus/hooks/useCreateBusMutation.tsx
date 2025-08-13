@@ -42,6 +42,7 @@ export default function useCreateBusMutation() {
       toast.success("Bus created successfully");
       // Invalidate and refetch buses
       queryClient.invalidateQueries({ queryKey: ["buses"] });
+      queryClient.invalidateQueries({ queryKey: ["bus-seats"] });
     },
   });
 }

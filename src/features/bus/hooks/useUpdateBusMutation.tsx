@@ -85,6 +85,7 @@ export default function useUpdateBusMutation() {
     onSettled: () => {
       // Always refetch after error or success to ensure we have the latest data
       queryClient.invalidateQueries({ queryKey: ["buses"] });
+      queryClient.invalidateQueries({ queryKey: ["bus-seats"] });
     },
   });
 }

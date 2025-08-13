@@ -8,11 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import SeatButton from "./SeatButton";
+import BusSeatLayout from "../../bus/components/BusSeatLayout";
+import { generateStandardBusLayout } from "../../bus/components/busLayoutConfigs";
 import { SeatType } from "@/features/seat/types/types";
 import { AggregatedTripType } from "@/features/trips/types/types";
 import { CashierType } from "@/features/cashier/types/types";
 import { formatTime } from "@/lib/utils";
+import {
+  bus23Layout,
+  bus29Layout,
+} from "../../bus/components/customBusLayouts";
 
 interface TicketPassengerFormProps {
   price: string;
@@ -26,9 +31,6 @@ interface TicketPassengerFormProps {
   trip: AggregatedTripType;
   seats: SeatType[];
   unavailableSeats: number[];
-  leftSeats: number[];
-  rightSeats: number[];
-  backSeats: number[];
   cashiers: CashierType[];
   handleSeatSelect: (seatNumber: number) => void;
 }
@@ -45,9 +47,6 @@ const TicketPassengerForm: React.FC<TicketPassengerFormProps> = ({
   trip,
   seats,
   unavailableSeats,
-  leftSeats,
-  rightSeats,
-  backSeats,
   cashiers,
   handleSeatSelect,
 }) => {
@@ -133,6 +132,16 @@ const TicketPassengerForm: React.FC<TicketPassengerFormProps> = ({
     setDefaultPrices(defaultPrices.filter((_, i) => i !== index));
   };
 
+  function handleBusLayout() {
+    if (trip?.bus?.capacity === 29) {
+      return bus29Layout;
+    } else if (trip.bus.capacity === 23) {
+      return bus23Layout;
+    }
+
+    return generateStandardBusLayout(trip?.bus?.capacity);
+  }
+
   return (
     <div className="p-4 bg-white border rounded-sm">
       <div className="flex gap-3 mb-2">
@@ -189,71 +198,14 @@ const TicketPassengerForm: React.FC<TicketPassengerFormProps> = ({
             </div>
 
             <div className="w-full flex flex-col justify-center items-center">
-              <div className="grid grid-cols-2 gap-12 justify-center mb-5">
-                <div className="grid grid-cols-2 gap-4">
-                  {leftSeats.map(seatNumber => {
-                    const seat = getSeat({ number: seatNumber });
-                    const isUnavailable = seat
-                      ? unavailableSeats.includes(seat.id)
-                      : false;
-                    return (
-                      <SeatButton
-                        key={seatNumber}
-                        seatNumber={seatNumber}
-                        isSelected={selectedSeat === (seat && seat.id)}
-                        isUnavailable={isUnavailable}
-                        onSeatSelect={() =>
-                          !isUnavailable && handleSeatSelect(seatNumber)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {rightSeats.map(seatNumber => {
-                    const seat = getSeat({ number: seatNumber });
-                    const isUnavailable = seat
-                      ? unavailableSeats.includes(seat.id)
-                      : false;
-                    return (
-                      <SeatButton
-                        key={seatNumber}
-                        seatNumber={seatNumber}
-                        isSelected={selectedSeat === (seat && seat.id)}
-                        isUnavailable={isUnavailable}
-                        onSeatSelect={() =>
-                          !isUnavailable && handleSeatSelect(seatNumber)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-5 gap-2 justify-center pt-4 border-t">
-                {backSeats.map(seatNumber => {
-                  const seat = getSeat({ number: seatNumber });
-                  const isUnavailable = seat
-                    ? unavailableSeats.includes(seat.id)
-                    : false;
-                  return (
-                    <SeatButton
-                      key={seatNumber}
-                      seatNumber={seatNumber}
-                      isSelected={selectedSeat === (seat && seat.id)}
-                      isUnavailable={isUnavailable}
-                      onSeatSelect={() =>
-                        !isUnavailable && handleSeatSelect(seatNumber)
-                      }
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="text-center text-xs mt-4 text-gray-600">
-              ALLEN - CATARMAN & V.V
+              {/* Bus seat layout */}
+              <BusSeatLayout
+                config={handleBusLayout()}
+                selectedSeat={selectedSeat}
+                unavailableSeats={unavailableSeats}
+                onSeatSelect={handleSeatSelect}
+                getSeat={getSeat}
+              />
             </div>
           </div>
 

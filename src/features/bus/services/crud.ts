@@ -83,7 +83,7 @@ export async function editBus(
   id: number,
   fields: { plate_number?: string; station_id?: number; capacity?: number }
 ) {
-  const data: Record<string, any> = {};
+  const data: Partial<typeof fields> = {};
   if (fields.plate_number !== undefined)
     data.plate_number = fields.plate_number;
   if (fields.station_id !== undefined) data.station_id = fields.station_id;
@@ -93,11 +93,80 @@ export async function editBus(
     const seatCount = await tx.seat.count({
       where: { bus_id: id },
     });
-    if (data.capacity < seatCount) {
-      throw new Error(
-        `Cannot reduce capacity to ${data.capacity} since bus with id: ${id} has ${seatCount} seats`
-      );
+
+    if (data.capacity !== undefined) {
+      // If capacity is decreasing, delete excess seats
+      if (data.capacity < seatCount) {
+        // Check if any of the seats to be removed are currently booked
+        const seatsToRemove = await tx.seat.findMany({
+          where: {
+            bus_id: id,
+            seat_number: {
+              in: Array.from(
+                { length: seatCount - data.capacity },
+                (_, i) =>
+                  `S${(data.capacity! + i + 1).toString().padStart(2, "0")}`
+              ),
+            },
+          },
+          include: {
+            ticket: {
+              include: {
+                trip: true,
+              },
+            },
+          },
+        });
+
+        // Check if any of these seats have active bookings
+        const activeBookings = seatsToRemove.filter(seat =>
+          seat.ticket.some(
+            ticket =>
+              ticket.trip && new Date(ticket.trip.start_time!) > new Date()
+          )
+        );
+
+        if (activeBookings.length > 0) {
+          const bookedSeatNumbers = activeBookings
+            .map(seat => seat.seat_number)
+            .join(", ");
+          throw new Error(
+            `Cannot reduce capacity to ${data.capacity}. The following seats have active bookings: ${bookedSeatNumbers}`
+          );
+        }
+
+        // Delete the excess seats (starting from the highest seat numbers)
+        await tx.seat.deleteMany({
+          where: {
+            bus_id: id,
+            seat_number: {
+              in: Array.from(
+                { length: seatCount - data.capacity },
+                (_, i) =>
+                  `S${(data.capacity! + i + 1).toString().padStart(2, "0")}`
+              ),
+            },
+          },
+        });
+      }
+
+      // If capacity is increasing, create new seats
+      if (data.capacity > seatCount) {
+        const seatsData = [];
+        for (let i = seatCount + 1; i <= data.capacity; i++) {
+          seatsData.push({
+            seat_number: `S${i.toString().padStart(2, "0")}`,
+            bus_id: id,
+          });
+        }
+
+        // Create the new seats
+        await tx.seat.createMany({
+          data: seatsData,
+        });
+      }
     }
+
     return await tx.bus.update({
       where: { id },
       data: data,
@@ -112,12 +181,12 @@ export async function editBus(
  * @param id - Bus ID
  */
 export async function deleteBus(id: number) {
-  const result = await prisma.$transaction(async prismaTx => {
-    const deletedSeats = await prisma.seat.deleteMany({
+  const result = await prisma.$transaction(async tx => {
+    const deletedSeats = await tx.seat.deleteMany({
       where: { bus_id: id },
     });
 
-    const deletedBus = await prisma.bus.deleteMany({
+    const deletedBus = await tx.bus.deleteMany({
       where: { id: id },
     });
 

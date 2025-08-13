@@ -24,6 +24,7 @@ export default function useDeleteBusMutation() {
       toast.success("Bus deleted successfully");
       // Invalidate and refetch buses
       queryClient.invalidateQueries({ queryKey: ["buses"] });
+      queryClient.invalidateQueries({ queryKey: ["bus-seats"] });
     },
   });
 }
