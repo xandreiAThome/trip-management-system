@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 
 import {
@@ -24,8 +24,9 @@ import { AggregatedBusType } from "@/features/bus/types/types";
 import { DriverType } from "@/features/driver/types/types";
 import { StationType } from "@/features/station/types/types";
 import { formatTime } from "@/lib/utils";
-import { AggregatedTicketType } from "@features/ticket/types/types";
 import { toast } from "sonner";
+import usePassengerTicketsQuery from "@/features/ticket/hooks/usePassengerTicketsQuery";
+import useUpdateTripStatusMutation from "@/features/trips/hooks/useUpdateTripStatusMutation";
 
 interface TripCardProps {
   trip: AggregatedTripType;
@@ -45,64 +46,20 @@ export default function TripCard({
   const [status, setStatus] = useState<"boarding" | "transit" | "complete">(
     trip.status ?? "boarding"
   );
-  const [loading, setLoading] = useState({
-    status: false,
-  });
+
+  // TanStack Query hooks
+  const { data: passengerTickets = [] } = usePassengerTicketsQuery(trip.id);
+  const updateTripStatusMutation = useUpdateTripStatusMutation();
 
   // Extract data from props (assuming props now includes the relations)
   const { src_station, dest_station, driver, bus } = trip;
 
-  // Get passenger tickets for count
-  const [passengerTickets, setPassengerTickets] = useState<
-    AggregatedTicketType[]
-  >([]);
-
-  const fetchPassengerTickets = useCallback(() => {
-    fetch(`/api/ticket/passenger/trip/${trip.id}`)
-      .then(res => res.json())
-      .then(data => {
-        setPassengerTickets(
-          Array.isArray(data.passenger_tickets) ? data.passenger_tickets : []
-        );
-      })
-      .catch(() => setPassengerTickets([]));
-  }, [trip.id]);
-
-  useEffect(() => {
-    fetchPassengerTickets();
-
-    // Set up event listeners for ticket changes
-    const handleTicketChange = () => {
-      fetchPassengerTickets();
-    };
-
-    // Listen for custom ticketRefunded events
-    window.addEventListener("ticketRefunded", handleTicketChange);
-
-    // Listen for storage changes as fallback
-    window.addEventListener("storage", handleTicketChange);
-
-    return () => {
-      window.removeEventListener("ticketRefunded", handleTicketChange);
-      window.removeEventListener("storage", handleTicketChange);
-    };
-  }, [fetchPassengerTickets]);
-
   async function handleStatusChange(newStatus: string) {
     try {
-      setLoading(prev => ({ ...prev, status: true }));
-
-      const response = await fetch(`/api/trip/${trip.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: newStatus }),
+      await updateTripStatusMutation.mutateAsync({
+        tripId: trip.id,
+        status: newStatus as "boarding" | "transit" | "complete",
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to update trip status");
-      }
 
       setStatus(newStatus as "boarding" | "transit" | "complete");
       onSuccessEdit(); // Refresh trip data in parent component
@@ -111,13 +68,11 @@ export default function TripCard({
       const errorMessage =
         error instanceof Error ? error.message : "Failed to update trip status";
       toast.error(errorMessage);
-    } finally {
-      setLoading(prev => ({ ...prev, status: false }));
     }
   }
 
   // Loading state only for status changes now
-  if (loading.status) {
+  if (updateTripStatusMutation.isPending) {
     return (
       <Card className="flex flex-col gap-1 p-5">
         <div className="animate-pulse space-y-4">
@@ -174,7 +129,7 @@ export default function TripCard({
           <Select
             value={status}
             onValueChange={handleStatusChange}
-            disabled={loading.status}
+            disabled={updateTripStatusMutation.isPending}
           >
             <SelectTrigger
               className={`
@@ -230,7 +185,7 @@ export default function TripCard({
               )}
             </div>
             <Link
-              className="bg-green-600 text-white py-1 px-2 rounded-lg font-bold "
+              className="bg-green-700 text-white py-1 px-2 rounded-lg font-bold "
               href={`/ticket/${trip.id}`}
             >
               Issue Ticket
