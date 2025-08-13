@@ -20,103 +20,79 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { useEffect, useState } from "react";
-import { toast, Toaster } from "sonner";
+import { useState } from "react";
+import { Toaster } from "sonner";
 
-type Station = {
-  id: number;
-  name: string;
+import { StationType } from "@/features/station/types/types";
+import useStationsQuery from "@/features/station/hooks/useStationsQuery";
+import usePostStationMutate from "@/features/station/hooks/usePostStationMutate";
+import useDeleteStationMutate from "@/features/station/hooks/useDeleteStatonMutate";
+import usePatchStationMutate from "@/features/station/hooks/usePatchStationMutate";
+
+type StationTabProps = {
+  stations: StationType[];
 };
 
-export default function StationTab() {
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+export default function StationTab({
+  stations: initStations,
+}: StationTabProps) {
   const [adding, setAdding] = useState(false);
   const [newStation, setNewStation] = useState({ name: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editStation, setEditStation] = useState({ name: "" });
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const fetchStations = () => {
-    setLoading(true);
-    fetch("/api/station")
-      .then(res => res.json())
-      .then(data => {
-        setStations(data.stations || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load stations");
-        setLoading(false);
-      });
-  };
+  const {
+    data: stations = [],
+    isLoading: stationsLoading,
+    error: stationsError,
+  } = useStationsQuery(initStations);
 
-  useEffect(() => {
-    fetchStations();
-  }, []);
+  const postStationMutation = usePostStationMutate();
+  const deleteStationMutation = useDeleteStationMutate();
+  const patchStationMutation = usePatchStationMutate();
 
   const handleAdd = async () => {
     if (!newStation.name) return;
     setAdding(true);
-    await fetch("/api/station", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newStation.name }),
-    });
+    await postStationMutation.mutateAsync(newStation);
     setNewStation({ name: "" });
     setAdding(false);
-    fetchStations();
   };
 
   const handleDelete = async (id: number) => {
-    try {
-      const res = await fetch(`/api/station/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        toast.error("Failed to delete station");
-        throw new Error("Delete Failed");
-      }
-      fetchStations();
-      toast.success("Deleted station succesfully");
-
-      setDeleteId(null);
-    } catch {
-      toast.error("Failed to delete station");
-    }
+    await deleteStationMutation.mutateAsync(id);
+    setDeleteId(null);
   };
 
-  const handleEdit = (station: Station) => {
+  const handleEdit = (station: StationType) => {
     setEditingId(station.id);
     setEditStation({ name: station.name });
   };
 
   const handleEditSave = async (id: number) => {
-    try {
-      const res = await fetch(`/api/station/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editStation.name }),
-      });
-      if (!res.ok) {
-        toast.error("Failed to update station");
-        throw new Error("PATCH failed");
-      }
-      toast.success("Updated station succesfully");
-      setEditingId(null);
-      setEditStation({ name: "" });
-      fetchStations();
-    } catch {
-      toast.error("Failed to update station");
-    }
+    await patchStationMutation.mutateAsync({
+      id,
+      update: { name: editStation.name },
+    });
+
+    setEditingId(null);
+    setEditStation({ name: "" });
   };
 
   return (
-    <div>
+    <>
       <h2 className="text-xl font-semibold mb-2">Manage Stations</h2>
-      {loading ? (
-        <div>Loading stations...</div>
-      ) : error ? (
-        <div className="text-red-500">{error}</div>
+      {stationsLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <p className="text-lg">Loading stations...</p>
+        </div>
+      ) : stationsError ? (
+        <div className="flex items-center justify-center py-8">
+          <p className="text-red-500">
+            Error loading stations, please refresh the browser
+          </p>
+        </div>
       ) : (
         <Table>
           <TableHeader>
@@ -218,6 +194,6 @@ export default function StationTab() {
         </Button>
       </div>
       <Toaster position="top-right" richColors />
-    </div>
+    </>
   );
 }

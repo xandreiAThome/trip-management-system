@@ -198,7 +198,7 @@ export default function UserTab({
   };
 
   return (
-    <div>
+    <>
       <h2 className="text-xl font-semibold mb-2">Manage User Roles</h2>
 
       {(usersError || cashierError || stationsError || driversError) && (
@@ -334,6 +334,6 @@ export default function UserTab({
 
       {/* Sonner Toaster for notifications */}
       <Toaster position="top-right" richColors />
-    </div>
+    </>
   );
 }
