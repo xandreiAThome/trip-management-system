@@ -49,8 +49,6 @@ export default function OverviewCard() {
     );
   }
 
-  console.log(trips);
-
   return (
     <div className="h-full flex items-start justify-center p-5  sm:pt-5 pt-12 relative bg-green-50">
       <Card className="w-full max-w-4xl h-full min-h-[calc(100vh-40px)] overflow-y-auto p-5">

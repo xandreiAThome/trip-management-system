@@ -11,8 +11,9 @@ interface BaggageTicketType {
 
 interface PassengerTicketType {
   id: number;
-  seat: string;
-  discount: number | null;
+  passenger_name: string | null;
+  discount: "student" | "pwd" | "senior" | null;
+  ticket_id: number;
 }
 
 interface SeatType {

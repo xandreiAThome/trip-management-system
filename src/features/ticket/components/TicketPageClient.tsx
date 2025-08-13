@@ -48,10 +48,17 @@ export default function TicketPageClient({
 
   // Computed values
   const unavailableSeats = useMemo(() => {
+    // For completed trips, no seats should be shown as unavailable
+    // since users can issue tickets for any seat (they won't be marked as occupied anyway)
+    if (trip?.status === "complete") {
+      return [];
+    }
+
+    // For active trips, show occupied seats as unavailable
     return seats
       .filter((seat: SeatType) => seat.status === "occupied")
       .map((seat: SeatType) => seat.id);
-  }, [seats]);
+  }, [seats, trip?.status]);
 
   const isLoading = loadingTrip || loadingSeats || loadingCashiers;
   const isSubmitting =
@@ -143,6 +150,11 @@ export default function TicketPageClient({
     const seatNumber =
       getSeat({ id: selectedSeat ?? undefined })?.seat_number || null;
 
+    // Convert selectedStanding to the correct format for the database
+    const discountValue = selectedStanding
+      ? selectedStanding.toLowerCase()
+      : null;
+
     const payload = {
       price,
       trip_id: trip.id,
@@ -151,13 +163,19 @@ export default function TicketPageClient({
       passenger_name: "_",
       seat_id: selectedSeat,
       seat_number: seatNumber,
+      discount: discountValue,
     };
 
     try {
       await createTicketMutation.mutateAsync(payload);
 
-      // Update seat status if a seat was selected
-      if (selectedSeat !== null && seatNumber && trip.bus?.id) {
+      // Update seat status if a seat was selected and trip is not complete
+      if (
+        selectedSeat !== null &&
+        seatNumber &&
+        trip.bus?.id &&
+        trip.status !== "complete"
+      ) {
         await updateSeatStatusMutation.mutateAsync({
           seatId: selectedSeat,
           status: "occupied",
@@ -166,7 +184,12 @@ export default function TicketPageClient({
       }
 
       setSelectedSeat(null);
-      toast.success("Passenger Ticket successfully created");
+      setSelectedStanding(null);
+      const message =
+        trip.status === "complete"
+          ? "Passenger Ticket created (trip completed - seat not occupied)"
+          : "Passenger Ticket successfully created";
+      toast.success(message);
     } catch (error) {
       console.error("Error:", error);
       toast.error(
@@ -201,6 +224,12 @@ export default function TicketPageClient({
       <h1 className="text-2xl font-semibold text-center mt-5 text-[#FFFFFF]">
         Issue Tickets
       </h1>
+      {trip.status === "complete" && (
+        <div className="mt-2 bg-orange-100 border border-orange-400 text-orange-700 px-3 py-2 rounded-md text-sm">
+          ⚠️ This trip is completed. Tickets can still be issued but seats will
+          not be marked as occupied.
+        </div>
+      )}
       <Tabs
         value={selectedType}
         onValueChange={setSelectedType}
