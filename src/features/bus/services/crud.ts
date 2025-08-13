@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
  * Get all buses from the database.
  */
 export async function getAllBuses() {
-  const buses = await prisma.bus.findMany();
+  const buses = await prisma.bus.findMany({
+    include: {
+      station: true,
+    },
+  });
   return buses;
 }
 

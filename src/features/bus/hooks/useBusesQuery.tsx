@@ -13,6 +13,6 @@ export default function useBusesQuery(initBuses?: AggregatedBusType[]) {
       return data.buses || data;
     },
     initialData: initBuses,
-    staleTime: 60 * 1000, // 5 minutes
+    staleTime: 60 * 1000,
   });
 }

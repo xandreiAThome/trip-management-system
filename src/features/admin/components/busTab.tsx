@@ -20,26 +20,31 @@ import {
   Table,
 } from "@/components/ui/table";
 
-import { useEffect, useState } from "react";
-import { toast, Toaster } from "sonner";
-
-type Bus = {
-  id: number;
-  plate_number: string;
-  station_id: number;
-  capacity: number;
-};
-
-type Station = {
-  id: number;
-  name: string;
-};
+import { useState } from "react";
+import { Toaster } from "sonner";
+import useBusesQuery from "@/features/bus/hooks/useBusesQuery";
+import useStationsQuery from "@/features/station/hooks/useStationsQuery";
+import useCreateBusMutation from "@/features/bus/hooks/useCreateBusMutation";
+import useUpdateBusMutation from "@/features/bus/hooks/useUpdateBusMutation";
+import useDeleteBusMutation from "@/features/bus/hooks/useDeleteBusMutation";
+import { AggregatedBusType } from "@/features/bus/types/types";
 
 export default function BusesTab() {
-  const [buses, setBuses] = useState<Bus[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // TanStack Query hooks
+  const {
+    data: buses = [],
+    isLoading: loadingBuses,
+    error: busesError,
+  } = useBusesQuery();
+  const { data: stations = [], isLoading: loadingStations } =
+    useStationsQuery();
+
+  // Mutation hooks
+  const createBusMutation = useCreateBusMutation();
+  const updateBusMutation = useUpdateBusMutation();
+  const deleteBusMutation = useDeleteBusMutation();
+
+  // Local state for UI
   const [adding, setAdding] = useState(false);
   const [newBus, setNewBus] = useState({
     plate_number: "",
@@ -52,33 +57,7 @@ export default function BusesTab() {
     station_id: -1,
     capacity: "",
   });
-
-  const fetchBuses = () => {
-    setLoading(true);
-    fetch("/api/bus")
-      .then(res => res.json())
-      .then(data => {
-        setBuses(data.buses || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load buses");
-        setLoading(false);
-      });
-  };
-
-  const fetchStations = () => {
-    fetch("/api/station")
-      .then(res => res.json())
-      .then(data => {
-        setStations(data.stations || []);
-      });
-  };
-
-  useEffect(() => {
-    fetchBuses();
-    fetchStations();
-  }, []);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const handleAdd = async () => {
     if (
@@ -88,38 +67,33 @@ export default function BusesTab() {
       isNaN(Number(newBus.capacity))
     )
       return;
-    setAdding(true);
-    await fetch("/api/bus", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newBus, capacity: Number(newBus.capacity) }),
-    });
-    setNewBus({ plate_number: "", station_id: -1, capacity: "" });
-    setAdding(false);
-    fetchBuses();
-  };
 
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const handleDelete = async (id: number) => {
+    setAdding(true);
     try {
-      const res = await fetch(`/api/bus/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        throw new Error("Delete failed");
-        toast.error("Failed to delete bus");
-      }
-      toast.success("Bus deleted successfully");
-      setDeleteId(null);
-      fetchBuses();
-    } catch {
-      toast.error("Failed to delete bus");
+      await createBusMutation.mutateAsync({
+        ...newBus,
+        capacity: Number(newBus.capacity),
+      });
+      setNewBus({ plate_number: "", station_id: -1, capacity: "" });
+    } finally {
+      setAdding(false);
     }
   };
 
-  const handleEdit = (bus: Bus) => {
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteBusMutation.mutateAsync(id);
+      setDeleteId(null);
+    } catch {
+      // Error is already handled by the mutation
+    }
+  };
+
+  const handleEdit = (bus: AggregatedBusType) => {
     setEditingId(bus.id);
     setEditBus({
       plate_number: bus.plate_number,
-      station_id: bus.station_id,
+      station_id: bus.station.id,
       capacity: String(bus.capacity),
     });
   };
@@ -127,34 +101,25 @@ export default function BusesTab() {
   const handleEditSave = async (id: number) => {
     if (editBus.capacity === "" || isNaN(Number(editBus.capacity))) return;
     try {
-      const res = await fetch(`/api/bus/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...editBus,
-          capacity: Number(editBus.capacity),
-        }),
+      await updateBusMutation.mutateAsync({
+        id,
+        ...editBus,
+        capacity: Number(editBus.capacity),
       });
-      if (!res.ok) {
-        toast.error("Failed to update bus");
-        throw new Error("Save failed");
-      }
-      toast.success("Bus updated successfully");
       setEditingId(null);
       setEditBus({ plate_number: "", station_id: -1, capacity: "" });
-      fetchBuses();
     } catch {
-      toast.error("Failed to update bus");
+      // Error is already handled by the mutation
     }
   };
 
   return (
     <div>
       <h2 className="text-xl font-semibold mb-2">Manage Buses</h2>
-      {loading ? (
-        <div>Loading buses...</div>
-      ) : error ? (
-        <div className="text-red-500">{error}</div>
+      {loadingBuses || loadingStations ? (
+        <div>Loading buses and stations...</div>
+      ) : busesError ? (
+        <div className="text-red-500">Failed to load buses</div>
       ) : (
         <Table>
           <TableHeader>
@@ -232,10 +197,7 @@ export default function BusesTab() {
                 ) : (
                   <>
                     <TableCell>{bus.plate_number}</TableCell>
-                    <TableCell>
-                      {stations.find(s => s.id === bus.station_id)?.name ||
-                        bus.station_id}
-                    </TableCell>
+                    <TableCell>{bus.station?.name || "No station"}</TableCell>
                     <TableCell>{bus.capacity}</TableCell>
                     <TableCell>
                       <Button onClick={() => handleEdit(bus)} className="mr-2">

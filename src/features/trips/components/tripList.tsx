@@ -1,40 +1,29 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React from "react";
 // import TripCard from "./tripCard";
-import { AggregatedTripType } from "../types/types";
+import { useQuery } from "@tanstack/react-query";
+
+function useAllTripsQuery() {
+  return useQuery({
+    queryKey: ["all-trips"],
+    queryFn: async () => {
+      const response = await fetch("/api/trip");
+
+      if (!response.ok) {
+        throw new Error(response.statusText || "Failed to fetch trips");
+      }
+
+      const data = await response.json();
+      console.log(data);
+
+      // Handle the API response structure
+      return data.data || [];
+    },
+  });
+}
 
 function TripsList() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [trips, setTrips] = useState<AggregatedTripType[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchTrips = async () => {
-      try {
-        const response = await fetch("/api/trip");
-
-        if (!response.ok) {
-          throw new Error(response.statusText || "Failed to fetch trips");
-        }
-
-        const data = await response.json();
-        console.log(data);
-
-        // Handle the API response structure
-        const tripsData = data.data || [];
-        setTrips(tripsData);
-      } catch (err) {
-        console.error("Error fetching trips:", err);
-        setError(
-          err instanceof Error ? err.message : "An unknown error occurred"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTrips();
-  }, []);
+  const { data: trips = [], isLoading, error } = useAllTripsQuery();
 
   if (isLoading) {
     return (
@@ -52,7 +41,7 @@ function TripsList() {
   if (error) {
     return (
       <div className="text-center text-red-500 py-8">
-        <p>Failed to load trips: {error}</p>
+        <p>Failed to load trips: {error.message}</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-2 text-sm underline"
