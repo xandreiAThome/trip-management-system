@@ -2,7 +2,6 @@
 
 import { AggregatedTicketType } from "@features/ticket/types/types";
 import React, { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { CashierType } from "@features/cashier/types/types";
 import {
   Dialog,
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import useUpdateBaggageTicketMutation from "../hooks/useUpdateBaggageTicketMutation";
 
 interface EditBaggageModalProps {
   ticket: AggregatedTicketType;
@@ -41,8 +41,8 @@ export default function EditBaggageDialog({
   const [senderName, setSenderName] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [item, setItem] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const updateBaggageTicketMutation = useUpdateBaggageTicketMutation();
 
   useEffect(() => {
     if (open) {
@@ -58,7 +58,6 @@ export default function EditBaggageDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
     if (
       !cashierId &&
@@ -69,50 +68,33 @@ export default function EditBaggageDialog({
       !receiverName &&
       !item
     ) {
-      toast.error("Please fill in at least one field");
-      setIsSubmitting(false);
       return;
     }
 
     try {
-      const res = await fetch(`/api/ticket/baggage/${ticket.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          price: parseFloat(price),
-          trip_id: ticket.trip_id,
-          cashier_id: cashierId
-            ? parseInt(cashierId)
-            : (ticket.cashier?.id ?? undefined),
-          ticket_type: ticket.ticket_type,
-          sender_no:
-            parseInt(senderNo) || parseInt(ticket.baggage_ticket.sender_no),
-          dispatcher_no:
-            parseInt(dispatcherNo) ||
-            parseInt(ticket.baggage_ticket.dispatcher_no),
-          sender_name: senderName || ticket.baggage_ticket.sender_name,
-          receiver_name: receiverName || ticket.baggage_ticket.receiver_name,
-          item: item || ticket.baggage_ticket.item,
-        }),
+      await updateBaggageTicketMutation.mutateAsync({
+        id: ticket.id,
+        price: parseFloat(price),
+        trip_id: ticket.trip_id,
+        cashier_id: cashierId
+          ? parseInt(cashierId)
+          : (ticket.cashier?.id ?? undefined),
+        ticket_type: ticket.ticket_type,
+        sender_no:
+          parseInt(senderNo) || parseInt(ticket.baggage_ticket.sender_no),
+        dispatcher_no:
+          parseInt(dispatcherNo) ||
+          parseInt(ticket.baggage_ticket.dispatcher_no),
+        sender_name: senderName || ticket.baggage_ticket.sender_name,
+        receiver_name: receiverName || ticket.baggage_ticket.receiver_name,
+        item: item || ticket.baggage_ticket.item,
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update baggage ticket");
-      }
-
-      toast.success("Baggage ticket updated successfully");
       setOpen(false);
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error("Error updating baggage ticket:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to update baggage ticket"
-      );
-    } finally {
-      setIsSubmitting(false);
+      // Error handling is done in the mutation hook
     }
   };
 
@@ -202,9 +184,11 @@ export default function EditBaggageDialog({
           <Button
             type="submit"
             className="w-full bg-[#71AC61] hover:bg-[#456A3B]"
-            disabled={isSubmitting}
+            disabled={updateBaggageTicketMutation.isPending}
           >
-            {isSubmitting ? "Saving..." : "Update Baggage Ticket"}
+            {updateBaggageTicketMutation.isPending
+              ? "Saving..."
+              : "Update Baggage Ticket"}
           </Button>
         </form>
       </DialogContent>

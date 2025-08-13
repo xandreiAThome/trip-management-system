@@ -10,8 +10,10 @@ import PassengerCard from "@features/ticket/components/passengerCard";
 import BaggageCard from "@features/ticket/components/baggageCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AggregatedTicketType } from "../types/types";
-import { useEffect, useState, useCallback } from "react";
-import { CashierType } from "@features/cashier/types/types";
+import { useState } from "react";
+import usePassengerTicketsQuery from "../hooks/usePassengerTicketsQuery";
+import useBaggageTicketsQuery from "../hooks/useBaggageTicketsQuery";
+import useCashiersQuery from "@/features/cashier/hooks/useCashiersQuery";
 
 interface IssuedTicketsModalProps {
   tripId?: number; // Added tripId pro
@@ -21,48 +23,16 @@ export default function IssuedTicketsModal({
   tripId,
 }: IssuedTicketsModalProps) {
   const [open, setOpen] = useState(false);
-  const [passengerTickets, setPassengerTickets] = useState<
-    AggregatedTicketType[]
-  >([]);
-  const [baggageTickets, setBaggageTickets] = useState<AggregatedTicketType[]>(
-    []
-  );
-  const [cashiers, setCashiers] = useState<CashierType[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const fetchMeta = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [passRes, bagRes, cashierRes] = await Promise.all([
-        fetch(`/api/ticket/passenger/trip/${tripId}`),
-        fetch(`/api/ticket/baggage/trip/${tripId}`),
-        fetch("/api/cashier"),
-      ]);
-      if (!passRes.ok || !bagRes.ok || !cashierRes.ok) {
-        throw new Error("Failed to fetch meta data");
-      }
-      const [passData, bagData, cashierData] = await Promise.all([
-        passRes.json(),
-        bagRes.json(),
-        cashierRes.json(),
-      ]);
-      setPassengerTickets(passData.passenger_tickets || passData);
-      setBaggageTickets(bagData.baggage_tickets || bagData);
-      setCashiers(cashierData.cashiers || cashierData);
-    } catch (err) {
-      console.error("Failed to fetch tickets:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tripId]);
+  // TanStack Query hooks
+  const { data: passengerTickets = [], isLoading: isPassengerLoading } =
+    usePassengerTicketsQuery(tripId);
+  const { data: baggageTickets = [], isLoading: isBaggageLoading } =
+    useBaggageTicketsQuery(tripId);
+  const { data: cashiers = [], isLoading: isCashiersLoading } =
+    useCashiersQuery();
 
-  const handleTicketUpdate = () => {
-    fetchMeta(); // Refresh the tickets when a ticket is updated
-  };
-
-  useEffect(() => {
-    fetchMeta();
-  }, [fetchMeta]);
+  const isLoading = isPassengerLoading || isBaggageLoading || isCashiersLoading;
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
@@ -111,7 +81,7 @@ export default function IssuedTicketsModal({
                         key={pass.id}
                         ticket={pass}
                         cashiers={cashiers}
-                        onSuccess={handleTicketUpdate}
+                        onSuccess={() => {}}
                       />
                     ))}
                   </div>
@@ -132,7 +102,7 @@ export default function IssuedTicketsModal({
                         key={bag.id}
                         ticket={bag}
                         cashiers={cashiers}
-                        onSuccess={handleTicketUpdate}
+                        onSuccess={() => {}}
                       />
                     ))}
                   </div>

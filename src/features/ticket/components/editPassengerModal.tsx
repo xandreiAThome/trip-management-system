@@ -2,7 +2,6 @@
 
 import { AggregatedTicketType } from "@features/ticket/types/types";
 import React, { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { CashierType } from "@features/cashier/types/types";
 import {
   Dialog,
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import useUpdateTicketMutation from "../hooks/useUpdateTicketMutation";
 
 interface EditPassengerModalProps {
   ticket: AggregatedTicketType;
@@ -36,8 +36,8 @@ export default function EditPassengerDialog({
 }: EditPassengerModalProps) {
   const [cashierId, setCashierId] = useState("");
   const [price, setPrice] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const updateTicketMutation = useUpdateTicketMutation();
 
   useEffect(() => {
     if (open) {
@@ -48,41 +48,27 @@ export default function EditPassengerDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+
     if (!cashierId && !price) {
-      toast.error("Please fill in at least one field");
-      setIsSubmitting(false);
       return;
     }
+
     try {
-      const res = await fetch(`/api/ticket/passenger/${ticket.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          price: parseFloat(price),
-          trip_id: ticket.trip_id,
-          cashier_id: cashierId
-            ? parseInt(cashierId)
-            : (ticket.cashier?.id ?? undefined),
-          ticket_type: ticket.ticket_type,
-        }),
+      await updateTicketMutation.mutateAsync({
+        id: ticket.id,
+        price: parseFloat(price),
+        trip_id: ticket.trip_id,
+        cashier_id: cashierId
+          ? parseInt(cashierId)
+          : (ticket.cashier?.id ?? undefined),
+        ticket_type: ticket.ticket_type,
       });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to update ticket");
-      }
-      toast.success("Ticket updated successfully");
+
       setOpen(false);
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error("Error updating ticket:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to update ticket"
-      );
-    } finally {
-      setIsSubmitting(false);
+      // Error handling is done in the mutation hook
     }
   };
 
@@ -126,9 +112,9 @@ export default function EditPassengerDialog({
           <Button
             type="submit"
             className="w-full bg-[#71AC61] hover:bg-[#456A3B]"
-            disabled={isSubmitting}
+            disabled={updateTicketMutation.isPending}
           >
-            {isSubmitting ? "Saving..." : "Update Ticket"}
+            {updateTicketMutation.isPending ? "Saving..." : "Update Ticket"}
           </Button>
         </form>
       </DialogContent>

@@ -11,8 +11,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import React, { useTransition } from "react";
-import { toast } from "sonner";
+import React from "react";
+import useDeleteTicketMutation from "../hooks/useDeleteTicketMutation";
 
 interface RefundDialogProps {
   ticketId: number;
@@ -23,46 +23,18 @@ export default function RefundDialog({
   ticketId,
   onSuccess,
 }: RefundDialogProps) {
-  const [isPending, startTransition] = useTransition();
+  const deleteTicketMutation = useDeleteTicketMutation();
 
   const handleRefund = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const res = await fetch(`/api/ticket/${ticketId}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Refund failed");
-      }
-
+      await deleteTicketMutation.mutateAsync(ticketId);
       onSuccess(); // Let parent component know
-      toast.success("Ticket refunded successfully");
-
-      // Trigger a custom event to notify other components
-      window.dispatchEvent(
-        new CustomEvent("ticketRefunded", {
-          detail: { ticketId },
-        })
-      );
-
-      // Also trigger storage event as fallback
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: "ticketRefunded",
-          newValue: Date.now().toString(),
-        })
-      );
-
       document.getElementById(`close-${ticketId}`)?.click(); // Close dialog
     } catch (err) {
       console.error("Refund error:", err);
-      // Show a user-friendly error message
-      toast.error(
-        `Refund failed: ${err instanceof Error ? err.message : "Unknown error"}`
-      );
+      // Error handling is done in the mutation hook
     }
   };
 
@@ -74,7 +46,7 @@ export default function RefundDialog({
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
-        <form onSubmit={e => startTransition(() => handleRefund(e))}>
+        <form onSubmit={handleRefund}>
           <DialogHeader>
             <DialogTitle>Refund Ticket</DialogTitle>
             <DialogDescription className="mb-5 text-md">
@@ -87,8 +59,8 @@ export default function RefundDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Refunding..." : "Confirm"}
+            <Button type="submit" disabled={deleteTicketMutation.isPending}>
+              {deleteTicketMutation.isPending ? "Refunding..." : "Confirm"}
             </Button>
           </DialogFooter>
         </form>
