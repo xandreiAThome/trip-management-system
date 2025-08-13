@@ -154,10 +154,11 @@ export default function TicketPageClient({
       await createTicketMutation.mutateAsync(payload);
 
       // Update seat status if a seat was selected
-      if (selectedSeat !== null && seatNumber) {
+      if (selectedSeat !== null && seatNumber && trip.bus?.id) {
         await updateSeatStatusMutation.mutateAsync({
           seatId: selectedSeat,
           status: "occupied",
+          busId: trip.bus.id,
         });
       }
 

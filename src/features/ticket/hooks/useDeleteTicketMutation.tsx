@@ -25,6 +25,11 @@ export default function useDeleteTicketMutation() {
       // Invalidate ticket queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["passenger-tickets"] });
       queryClient.invalidateQueries({ queryKey: ["baggage-tickets"] });
+      // Also invalidate seat queries in case a passenger ticket was refunded
+      queryClient.invalidateQueries({
+        queryKey: ["bus-seats"],
+        exact: false,
+      });
     },
   });
 }

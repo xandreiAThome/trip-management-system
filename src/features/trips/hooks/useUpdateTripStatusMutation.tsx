@@ -77,6 +77,11 @@ export default function useUpdateTripStatusMutation() {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["daily-trips"] });
       queryClient.invalidateQueries({ queryKey: ["trip"] });
+      // Invalidate seat queries as seat status may have changed
+      queryClient.invalidateQueries({
+        queryKey: ["bus-seats"],
+        exact: false,
+      });
     },
   });
 }

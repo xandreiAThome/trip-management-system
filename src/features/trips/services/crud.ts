@@ -443,12 +443,32 @@ export async function editTrip(
     });
   }
 
-  // Free up seats if trip is marked complete
-  if (status === "complete" && updated.bus?.id) {
-    await prisma.seat.updateMany({
-      where: { bus_id: updated.bus.id },
-      data: { status: "available" },
-    });
+  // Handle seat status changes based on trip status
+  if (status !== undefined && updated.bus?.id) {
+    if (status === "complete") {
+      // Free up all seats on the bus when trip is completed
+      await prisma.seat.updateMany({
+        where: { bus_id: updated.bus.id },
+        data: { status: "available" },
+      });
+    } else if (
+      existingTrip.status === "complete" &&
+      (status === "transit" || status === "boarding")
+    ) {
+      // Re-occupy seats that have active tickets when trip is reactivated
+      await prisma.seat.updateMany({
+        where: {
+          bus_id: updated.bus.id,
+          ticket: {
+            some: {
+              trip_id: updated.id,
+              ticket_type: "passenger",
+            },
+          },
+        },
+        data: { status: "occupied" },
+      });
+    }
   }
 
   return updated;

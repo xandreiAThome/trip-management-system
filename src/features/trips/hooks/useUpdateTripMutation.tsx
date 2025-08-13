@@ -9,6 +9,7 @@ type UpdateTripPayload = {
   dest_station_id?: number;
   start_time?: string;
   end_time?: string;
+  status?: "boarding" | "transit" | "complete";
 };
 
 export default function useUpdateTripMutation() {
@@ -39,6 +40,11 @@ export default function useUpdateTripMutation() {
       // Invalidate relevant queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["daily-trips"] });
       queryClient.invalidateQueries({ queryKey: ["trip"] });
+      // Invalidate seat queries as well in case trip status was updated
+      queryClient.invalidateQueries({
+        queryKey: ["bus-seats"],
+        exact: false,
+      });
     },
   });
 }

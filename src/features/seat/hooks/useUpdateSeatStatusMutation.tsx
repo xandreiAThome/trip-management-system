@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 interface UpdateSeatStatusParams {
   seatId: number;
   status: "available" | "occupied";
+  busId?: number; // Add busId to help with cache invalidation
 }
 
 export default function useUpdateSeatStatusMutation() {
@@ -23,9 +24,19 @@ export default function useUpdateSeatStatusMutation() {
 
       return res.json();
     },
-    onSuccess: () => {
-      // Invalidate bus seats queries that might contain this seat
-      queryClient.invalidateQueries({ queryKey: ["bus-seats"] });
+    onSuccess: (data, variables) => {
+      // Invalidate all bus seats queries to ensure all affected queries are refreshed
+      queryClient.invalidateQueries({
+        queryKey: ["bus-seats"],
+        exact: false, // This will invalidate all queries that start with ["bus-seats"]
+      });
+
+      // If busId is provided, specifically invalidate that bus's seats
+      if (variables.busId) {
+        queryClient.invalidateQueries({
+          queryKey: ["bus-seats", variables.busId],
+        });
+      }
     },
   });
 }
