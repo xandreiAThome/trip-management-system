@@ -47,13 +47,21 @@ export default async function AdminDashboard() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="users">
-            <UsersTab users={users} cashiers={cashiers} stations={stations} />
+            <UsersTab
+              users={(users ?? []).map(u => ({
+                ...u,
+                name: u.name ?? "",
+                image: u.image ?? "",
+              }))}
+              cashiers={cashiers ?? []}
+              stations={stations}
+            />
           </TabsContent>
           <TabsContent value="buses">
             <BusesTab />
           </TabsContent>
           <TabsContent value="stations">
-            <StationTab />
+            <StationTab stations={stations} />
           </TabsContent>
         </Tabs>
       </div>

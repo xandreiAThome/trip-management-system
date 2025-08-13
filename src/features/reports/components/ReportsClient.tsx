@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,61 +9,40 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-// import { TripSummary } from "@/features/reports/components/reportsSummary";
 import { PassengerTicketsTable } from "./passengerTicketsTable";
 import { BaggageTicketsTable } from "./baggageTicketsTable";
-import { AggregatedTicketType } from "@/features/ticket/types/types";
-import { AggregatedTripType } from "@/features/trips/types/types";
 import { format } from "date-fns";
+import useDailyTripsQuery from "@/features/trips/hooks/useDailyTripsQuery";
+import usePassengerTicketsQuery from "@/features/ticket/hooks/usePassengerTicketsQuery";
+import useBaggageTicketsQuery from "@/features/ticket/hooks/useBaggageTicketsQuery";
 
 export default function ReportsClient() {
   const [selectedTrip, setSelectedTrip] = useState<number | null>(null);
-  const [passengerTickets, setPassengerTickets] = useState<
-    AggregatedTicketType[]
-  >([]);
-  const [baggageTickets, setBaggageTickets] = useState<AggregatedTicketType[]>(
-    []
-  );
-  const [tripsList, setTripsList] = useState<AggregatedTripType[]>([]);
   const [day, setDay] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [loadingTrips, setLoadingTrips] = useState(false);
-  const [loadingTickets, setLoadingTickets] = useState(false);
 
+  // TanStack Query hooks
+  const { data: tripsList = [], isLoading: loadingTrips } =
+    useDailyTripsQuery(day);
+
+  const { data: passengerTickets = [], isLoading: loadingPassengerTickets } =
+    usePassengerTicketsQuery(selectedTrip === null ? undefined : selectedTrip);
+
+  const { data: baggageTickets = [], isLoading: loadingBaggageTickets } =
+    useBaggageTicketsQuery(selectedTrip === null ? undefined : selectedTrip);
+
+  // Auto-select first trip when trips load
   useEffect(() => {
-    if (day) {
-      setLoadingTrips(true);
-      fetch(`/api/trip/daily?date=${day}`)
-        .then(res => res.json())
-        .then(data => {
-          let trips = [];
-          if (Array.isArray(data.trips)) {
-            trips = data.trips;
-          }
-          setTripsList(trips);
-          setSelectedTrip(trips[0]?.id || null);
-        })
-        .finally(() => setLoadingTrips(false));
+    if (tripsList.length > 0 && !selectedTrip) {
+      setSelectedTrip(tripsList[0].id);
     }
+  }, [tripsList, selectedTrip]);
+
+  // Reset selected trip when day changes
+  useEffect(() => {
+    setSelectedTrip(null);
   }, [day]);
 
-  useEffect(() => {
-    if (selectedTrip) {
-      setLoadingTickets(true);
-      Promise.all([
-        fetch(`/api/ticket/passenger/trip/${selectedTrip}`).then(res =>
-          res.json()
-        ),
-        fetch(`/api/ticket/baggage/trip/${selectedTrip}`).then(res =>
-          res.json()
-        ),
-      ])
-        .then(([passengerData, baggageData]) => {
-          setPassengerTickets(passengerData.passenger_tickets || []);
-          setBaggageTickets(baggageData.baggage_tickets || []);
-        })
-        .finally(() => setLoadingTickets(false));
-    }
-  }, [selectedTrip]);
+  const loadingTickets = loadingPassengerTickets || loadingBaggageTickets;
 
   return (
     <div className="min-h-screen w-full bg-green-50">

@@ -1,15 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState, useMemo } from "react";
 import { toast, Toaster } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import TicketPassengerForm from "@/features/ticket/components/TicketPassengerForm";
 import TicketBaggageForm from "@/features/ticket/components/TicketBaggageForm";
-import { CashierType } from "@/features/cashier/types/types";
 import { SeatType } from "@/features/seat/types/types";
-import { AggregatedTripType } from "@/features/trips/types/types";
 import { Card } from "@/components/ui/card";
 import { Session } from "next-auth";
+import useCashiersQuery from "@/features/cashier/hooks/useCashiersQuery";
+import useTripByIdQuery from "@/features/trips/hooks/useTripByIdQuery";
+import useBusSeatsQuery from "@/features/seat/hooks/useBusSeatsQuery";
+import useCreateTicketMutation from "@/features/ticket/hooks/useCreateTicketMutation";
+import useUpdateSeatStatusMutation from "@/features/seat/hooks/useUpdateSeatStatusMutation";
 
 interface TicketPageClientProps {
   tripId: string;
@@ -20,8 +23,6 @@ export default function TicketPageClient({
   tripId,
   session,
 }: TicketPageClientProps) {
-  const [trip, setTrip] = useState<AggregatedTripType | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [price, setPrice] = useState("");
   const [selectedType, setSelectedType] = useState("passenger");
   const [selectedCashier, setSelectedCashier] = useState("");
@@ -33,88 +34,49 @@ export default function TicketPageClient({
   const [receiverName, setReceiverName] = useState("");
   const [item, setItem] = useState("");
 
-  const [cashiers, setCashiers] = useState<CashierType[]>([]);
-  const [seats, setSeats] = useState<SeatType[]>([]);
-  const [unavailableSeats, setUnavailableSeats] = useState<number[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // TanStack Query hooks
+  const { data: cashiers = [], isLoading: loadingCashiers } =
+    useCashiersQuery();
+  const { data: trip, isLoading: loadingTrip } = useTripByIdQuery(tripId);
+  const { data: seats = [], isLoading: loadingSeats } = useBusSeatsQuery(
+    trip?.bus?.id
+  );
+
+  // Mutations
+  const createTicketMutation = useCreateTicketMutation();
+  const updateSeatStatusMutation = useUpdateSeatStatusMutation();
+
+  // Computed values
+  const unavailableSeats = useMemo(() => {
+    return seats
+      .filter((seat: SeatType) => seat.status === "occupied")
+      .map((seat: SeatType) => seat.id);
+  }, [seats]);
+
+  const isLoading = loadingTrip || loadingSeats || loadingCashiers;
+  const isSubmitting =
+    createTicketMutation.isPending || updateSeatStatusMutation.isPending;
+
+  // Auto-select current user if they are a cashier
+  useMemo(() => {
+    if (
+      session?.user?.role === "cashier" &&
+      session.user?.user_id &&
+      cashiers.length > 0 &&
+      !selectedCashier
+    ) {
+      const currentCashier = cashiers.find(
+        cashier => cashier.user_id === session.user?.user_id
+      );
+      if (currentCashier) {
+        setSelectedCashier(currentCashier.id.toString());
+      }
+    }
+  }, [cashiers, session, selectedCashier]);
 
   const leftSeats = Array.from({ length: 12 }, (_, i) => i + 1);
   const rightSeats = Array.from({ length: 12 }, (_, i) => i + 13);
   const backSeats = Array.from({ length: 5 }, (_, i) => i + 25);
-
-  useEffect(() => {
-    let ignore = false;
-    async function getCashiers() {
-      try {
-        const res = await fetch("/api/cashier");
-        const data = await res.json();
-        if (!res.ok) throw new Error("Failed to fetch cashiers");
-        if (!ignore) {
-          setCashiers(data.cashiers);
-
-          // Auto-select current user if they are a cashier
-          if (session?.user?.role === "cashier" && session.user?.user_id) {
-            const currentCashier = data.cashiers.find(
-              (cashier: CashierType) =>
-                cashier.user_id === session.user?.user_id
-            );
-            if (currentCashier) {
-              setSelectedCashier(currentCashier.id.toString());
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching cashiers:", error);
-      }
-    }
-    getCashiers();
-    return () => {
-      ignore = true;
-    };
-  }, [session]);
-
-  useEffect(() => {
-    let ignore = false;
-    async function fetchTripAndSeats() {
-      if (!tripId) return;
-      setIsLoading(true);
-      try {
-        const tripRes = await fetch(`/api/trip/${tripId}`);
-        if (!tripRes.ok) throw new Error("Failed to fetch trip");
-        const tripData = await tripRes.json();
-        const tripObj: AggregatedTripType = {
-          ...tripData,
-          start_time: tripData.start_time
-            ? new Date(tripData.start_time)
-            : null,
-          end_time: tripData.end_time ? new Date(tripData.end_time) : null,
-        };
-        if (!ignore) setTrip(tripObj);
-
-        // Fetch seats if bus id exists
-        if (tripObj.bus && tripObj.bus.id) {
-          const seatsRes = await fetch(`/api/bus/${tripObj.bus.id}/seats`);
-          const seatsData = await seatsRes.json();
-          const seatList = seatsData.seats;
-          if (!ignore) {
-            setSeats(seatList);
-            const unavailable = seatList
-              .filter((seat: SeatType) => seat.status === "occupied")
-              .map((seat: SeatType) => seat.id);
-            setUnavailableSeats(unavailable);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching trip or seats:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchTripAndSeats();
-    return () => {
-      ignore = true;
-    };
-  }, [tripId]);
 
   const getSeat = (query: { id?: number; number?: number }) => {
     if (query.id !== undefined) {
@@ -137,28 +99,30 @@ export default function TicketPageClient({
 
   const handleBaggageSubmit = async () => {
     if (!trip) return;
-    setIsSubmitting(true);
+
     const payload = {
       price,
       trip_id: trip.id,
       cashier_id: Number(selectedCashier),
-      ticket_type: "baggage",
+      ticket_type: "baggage" as const,
       sender_no: senderNo,
       dispatcher_no: dispatcherNo,
       sender_name: senderName,
       receiver_name: receiverName,
       item,
     };
+
     try {
-      const response = await fetch("/api/ticket", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to create baggage ticket");
-      }
+      await createTicketMutation.mutateAsync(payload);
+
+      // Clear baggage form fields
+      setPrice("");
+      setSenderNo("");
+      setDispatcherNo("");
+      setSenderName("");
+      setReceiverName("");
+      setItem("");
+
       toast.success("Baggage Ticket successfully created");
     } catch (error) {
       console.error("Error:", error);
@@ -167,53 +131,36 @@ export default function TicketPageClient({
           ? error.message
           : "An error occurred while creating baggage ticket"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handlePassengerSubmit = async () => {
+    if (!trip) return;
+
     const seatNumber =
       getSeat({ id: selectedSeat ?? undefined })?.seat_number || null;
-    setIsSubmitting(true);
+
     const payload = {
       price,
-      trip_id: trip?.id || null,
+      trip_id: trip.id,
       cashier_id: Number(selectedCashier),
-      ticket_type: "passenger",
+      ticket_type: "passenger" as const,
       passenger_name: "_",
       seat_id: selectedSeat,
       seat_number: seatNumber,
     };
+
     try {
-      const ticketResponse = await fetch("/api/ticket", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const ticketData = await ticketResponse.json();
-      if (!ticketResponse.ok) {
-        throw new Error(ticketData.message || "Failed to create ticket");
-      }
+      await createTicketMutation.mutateAsync(payload);
 
-      if (seatNumber) {
-        const seatResponse = await fetch(`/api/seat/${selectedSeat}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "occupied" }),
+      // Update seat status if a seat was selected
+      if (selectedSeat !== null && seatNumber) {
+        await updateSeatStatusMutation.mutateAsync({
+          seatId: selectedSeat,
+          status: "occupied",
         });
-        const seatData = await seatResponse.json();
-        if (!seatResponse.ok) {
-          throw new Error(
-            seatData.message ||
-              "Ticket created but failed to update seat status"
-          );
-        }
       }
 
-      if (selectedSeat !== null) {
-        setUnavailableSeats(prev => [...prev, selectedSeat]);
-      }
       setSelectedSeat(null);
       toast.success("Passenger Ticket successfully created");
     } catch (error) {
@@ -223,8 +170,6 @@ export default function TicketPageClient({
           ? error.message
           : "An error occurred while creating ticket"
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -260,13 +205,13 @@ export default function TicketPageClient({
         <TabsList className="grid w-full grid-cols-2 pb-2 p-0 -my-1.5 bg-[#71AC61] -mb-5.5 mt-4">
           <TabsTrigger
             value="passenger"
-            className="bg-green-700 text-white data-[state=active]:bg-white data-[state=active]:text-[#71AC61] border rounded-b-none pb-4"
+            className="bg-white text-green-700 font-semibold data-[state=active]:bg-green-500 data-[state=active]:text-white border rounded-b-none pb-4"
           >
             Passenger
           </TabsTrigger>
           <TabsTrigger
             value="baggage"
-            className="bg-green-700 text-white data-[state=active]:bg-white data-[state=active]:text-[#71AC61] border rounded-b-none pb-4"
+            className="bg-white text-green-700 font-semibold data-[state=active]:bg-green-500 data-[state=active]:text-white border rounded-b-none pb-4"
           >
             Baggage
           </TabsTrigger>
